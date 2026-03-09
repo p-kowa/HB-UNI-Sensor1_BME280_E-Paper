@@ -43,6 +43,9 @@
 #ifdef SENSOR_BME280
 #include "../Sensors/Sens_BME280.h"    // HB-UNI-Sensor1 custom sensor class
 #endif
+#ifdef SENSOR_TSL2591
+#include "../Sensors/Sens_TSL2591.h"   // HB-UNI-Sensor1 custom sensor class
+#endif
 
 #ifdef USE_DISPLAY
     #include <epd154.h>
@@ -135,7 +138,7 @@ public:
 
 class WeatherEventMsg : public Message {
 public:
-    void init(uint8_t msgcnt, int16_t temp, uint16_t my_humidity10, uint16_t airPressure10, int16_t dewpoint10, uint16_t vaporConcentration100, uint16_t operatingVoltage1000, bool batLow)
+    void init(uint8_t msgcnt, int16_t temp, uint16_t my_humidity10, uint16_t airPressure10, int16_t dewpoint10, uint16_t vaporConcentration100, uint16_t operatingVoltage1000, bool batLow, uint16_t lux)
     {
 
         uint8_t t1 = (temp >> 8) & 0x7f;
@@ -162,7 +165,7 @@ public:
         DPRINT(F("msgcnt    : ")); DDECLN(msgcnt);
         
         
-        Message::init(0x15, msgcnt, 0x70, flags, t1, t2); //  length 21 = 0x15 bytes (see also addon hb-ep-devices-addon/CCU_RM/src/addon/firmware/rftypes/hb-uni-sensor-THP-BME280.xml)
+        Message::init(0x17, msgcnt, 0x70, flags, t1, t2); //  length 23 = 0x17 bytes (see also addon hb-ep-devices-addon/CCU_RM/src/addon/firmware/rftypes/hb-uni-sensor-THP-BME280.xml)
         // Message Length (first byte param.): 11 + payload
         //  1 Byte payload -> length 12
         // 12 Byte payload -> length 23
@@ -206,6 +209,10 @@ public:
         //operatingVoltage1000
         pload[8] =  (operatingVoltage1000 >> 8) & 0xff;
         pload[9] =  (operatingVoltage1000 >> 0) & 0xff;
+
+        // lux
+        pload[10] = (lux >> 8) & 0xff;
+        pload[11] = (lux >> 0) & 0xff;
     }
 };
 
@@ -303,10 +310,14 @@ class WeatherChannel : public Channel<Hal, SensorList1, EmptyList, List4, PEERS_
     int16_t   dewpoint10;
     uint16_t  vaporConcentration100;
     uint16_t  operatingVoltage1000;
+    uint16_t  lux;
     bool      regularWakeUp;
 
 #ifdef SENSOR_BME280
     Sens_Bme280   BME280;
+#endif
+#ifdef SENSOR_TSL2591
+    Sens_TSL2591  TSL2591;
 #endif
 
 public:
@@ -319,6 +330,7 @@ public:
         , dewpoint10(0)
         , vaporConcentration100(0)
         , operatingVoltage1000(0)
+        , lux(0)
         , regularWakeUp(true)
     {
     }
@@ -334,7 +346,7 @@ public:
         DDECLN(operatingVoltage1000);
         
         uint8_t msgcnt = device().nextcount();
-        msg.init(msgcnt, temperature10, humidity10, airPressure10, dewpoint10, vaporConcentration100, operatingVoltage1000, device().battery().low());
+        msg.init(msgcnt, temperature10, humidity10, airPressure10, dewpoint10, vaporConcentration100, operatingVoltage1000, device().battery().low(), lux);
         if (msg.flags() & Message::BCAST) {
             device().broadcastEvent(msg, *this);
         } else {
@@ -367,7 +379,11 @@ public:
         airPressure10         = BME280.pressureNN();
         dewpoint10            = BME280.dewPoint();
         vaporConcentration100 = BME280.vaporConcentration();
-        
+
+#ifdef SENSOR_TSL2591
+        TSL2591.measure();
+        lux = TSL2591.lux();
+#endif
         
         DPRINT(F("T/H/P/D/V (x10, aH x100) = "));
         DDEC(temperature10);DPRINT("/");
@@ -381,6 +397,7 @@ public:
         char humidityStr[6];
         char pressureStr[8];
         char batterieStr[8];
+        char luxStr[7];
         char displayStr[12];
 
         // Format temperature with one decimal place (e.g. "22.5")
@@ -432,6 +449,15 @@ public:
         strcat(displayStr, " V");
         display.printText(displayStr, 0, 3);
 
+#ifdef SENSOR_TSL2591
+        // Row 4: Lux
+        itoa(lux, luxStr, 10);
+        strcpy(displayStr, "L:");
+        strcat(displayStr, luxStr);
+        strcat(displayStr, " lx");
+        display.printText(displayStr, 0, 4);
+#endif
+
         display.updateDisplay();
 
         SPCR |= (1 << SPE);   // Hardware-SPI wieder an für CC1101
@@ -444,6 +470,9 @@ public:
 
 #ifdef SENSOR_BME280
         BME280.init((uint16_t)this->device().getList0().altitude(), (int8_t)this->getList1().tempOffset10(), (int8_t)this->getList1().humidOffset10(), (int8_t)this->getList1().pressOffset10());
+#endif
+#ifdef SENSOR_TSL2591
+        TSL2591.init();
 #endif
 
         DPRINTLN(F("Sensor setup done"));
@@ -491,26 +520,10 @@ public:
         TSDevice::configChanged();
         DPRINTLN(F("Config Changed: List0"));
 
-        uint8_t ledMode = this->getList0().ledMode();
-        DPRINT(F("ledMode: "));
-        DDECLN(ledMode);
-
         uint8_t lowBatLimit = this->getList0().lowBatLimit();
         DPRINT(F("lowBatLimit: "));
         DDECLN(lowBatLimit);
         battery().low(lowBatLimit);
-
-        uint8_t txDevTryMax = this->getList0().transmitDevTryMax();
-        DPRINT(F("transmitDevTryMax: "));
-        DDECLN(txDevTryMax);
-
-        uint16_t updCycle = this->getList0().updIntervall();
-        DPRINT(F("updCycle: "));
-        DDECLN(updCycle);
-
-        uint16_t altitude = this->getList0().altitude();
-        DPRINT(F("altitude: "));
-        DDECLN(altitude);
         
         // Einstellung der CC1101 Tx Sendeleistung
 

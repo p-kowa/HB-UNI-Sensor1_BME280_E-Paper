@@ -28,7 +28,8 @@
 // Andernfalls verwendet der Sketch Dummy-Werte als Messwerte (zum Testen der Anbindung an HomeMatic/RaspberryMatic/FHEM)
 //
 
-#define SENSOR_BME280      // I2C Sensor
+#define SENSOR_BME280      // I2C Sensor BME280 (T/H/P)
+#define SENSOR_TSL2591     // I2C Sensor TSL2591 (Lux)
 
 //---------------------------------------------------------
 // Pin Definitionen Allgemein
