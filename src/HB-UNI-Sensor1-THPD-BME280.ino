@@ -26,7 +26,7 @@
 // #define USE_OTA_BOOTLOADER
 
 #define SENSOR_ONLY
-#define USE_DISPLAY
+//#define USE_DISPLAY
 #define NDEBUG
 
 #define EI_NOTEXTERNAL

@@ -18,8 +18,8 @@
 //---------------------------------------------------------
 // Definition von Device ID und Device Serial
 // Bei mehreren Geräten des gleichen Typs (HB-UNI-Sensor1) muss Device ID und Device Serial unterschiedlich sein!
-#define cDEVICE_ID      { 0xF6, 0x04, 0x05 }
-#define cDEVICE_SERIAL  "BME280THP5"
+#define cDEVICE_ID      { 0xF6, 0x04, 0x06 }
+#define cDEVICE_SERIAL  "BME280THP6"
 //                       1234567890     SERIAL must be exact 10 characters!
 
 //---------------------------------------------------------
