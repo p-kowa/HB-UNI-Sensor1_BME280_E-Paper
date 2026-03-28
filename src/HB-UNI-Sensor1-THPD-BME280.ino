@@ -96,13 +96,13 @@ using namespace as;
 // Device ID und Device Serial werden aus einer .h Datei (hier im Beispiel Cfg/Device_Example.h) geholt um mehrere Geräte ohne weitere Änderungen des
 // Sketches flashen zu können.
 const struct DeviceInfo PROGMEM devinfo = {
-    cDEVICE_ID,        // Device ID           defined in ./Cfg/Device_BME280.h
-    cDEVICE_SERIAL,    // Device Serial       defined in ./Cfg/Device_BME280.h
-    { 0xF6, 0x04 },    // Device Model        needs to fit to Addon XML hb-uni-sensor-THPD-BME280.xml line 6:
-                       //                     <parameter index="10.0" size="2.0" const_value="0xF604" 
+    cDEVICE_ID,
+    cDEVICE_SERIAL,
+    { 0xF4, 0x01 },    // Device Model - fits to hb-uni-sensor-THPL-BME280.xml
+                       // <parameter index="10.0" size="2.0" const_value="0xF401"
     0x10,
-    as::DeviceType::THSensor,    // Device Type
-    { 0x01, 0x01 }               // Info Bytes
+    as::DeviceType::THSensor,
+    { 0x01, 0x01 }
 };
 
 // Configure the used hardware
@@ -138,22 +138,21 @@ public:
 
 class WeatherEventMsg : public Message {
 public:
-    void init(uint8_t msgcnt, int16_t temp, uint16_t my_humidity10, uint16_t airPressure10, int16_t dewpoint10, uint16_t vaporConcentration100, uint16_t operatingVoltage1000, bool batLow, uint16_t lux)
+    void init(uint8_t msgcnt, int16_t temp, uint16_t my_humidity10, uint16_t airPressure10, uint16_t operatingVoltage1000, bool batLow, uint16_t lux)
     {
 
         uint8_t t1 = (temp >> 8) & 0x7f;
         uint8_t t2 = temp & 0xff;
         if (batLow == true) {
-            t1 |= 0x80;    // set bat low bit
+            t1 |= 0x80;
         }
 
-        DPRINT(F("msg T/H/P/D/V/O (x10, ah x100) = "));
+        DPRINT(F("msg T/H/P/O/L (x10) = "));
         DDEC(temp);DPRINT("/");
-        DDEC(my_humidity10);;DPRINT("/");
-        DDEC(airPressure10);;DPRINT("/");
-        DDEC(dewpoint10);DPRINT("/");
-        DDEC(vaporConcentration100);DPRINT("/");
-        DDEC(operatingVoltage1000);DPRINTLN(" ");
+        DDEC(my_humidity10);DPRINT("/");
+        DDEC(airPressure10);DPRINT("/");
+        DDEC(operatingVoltage1000);DPRINT("/");
+        DDECLN(lux);
 
         // als Standard wird BCAST gesendet um Energie zu sparen, siehe Beschreibung unten.
         // Bei jeder 40. Nachricht senden wir stattdessen BIDI|WKMEUP, um eventuell anstehende Konfigurationsänderungen auch
@@ -163,9 +162,9 @@ public:
             flags = BIDI | WKMEUP;
         }
         DPRINT(F("msgcnt    : ")); DDECLN(msgcnt);
-        
-        
-        Message::init(0x17, msgcnt, 0x70, flags, t1, t2); //  length 23 = 0x17 bytes (see also addon hb-ep-devices-addon/CCU_RM/src/addon/firmware/rftypes/hb-uni-sensor-THP-BME280.xml)
+
+        Message::init(0x13, msgcnt, 0x70, flags, t1, t2); // length 19 = 0x13 (4 Byte weniger als vorher 0x17)
+
         // Message Length (first byte param.): 11 + payload
         //  1 Byte payload -> length 12
         // 12 Byte payload -> length 23
@@ -191,28 +190,20 @@ public:
 
      
         // humidity
-        pload[0] =  (my_humidity10 >> 8) & 0xff;
-        pload[1] =  (my_humidity10 >> 0) & 0xff;
-        
-        // humidity
-        pload[2] =  (airPressure10 >> 8) & 0xff;
-        pload[3] =  (airPressure10 >> 0) & 0xff;
+        pload[0] = (my_humidity10 >> 8) & 0xff;
+        pload[1] = (my_humidity10 >> 0) & 0xff;
 
-        // dewpoint
-        pload[4] =  (dewpoint10 >> 8) & 0xff;
-        pload[5] =  (dewpoint10 >> 0) & 0xff;
-        
-        // vapor concentration
-        pload[6] =  (vaporConcentration100 >> 8) & 0xff;
-        pload[7] =  (vaporConcentration100 >> 0) & 0xff;
+        // airPressure
+        pload[2] = (airPressure10 >> 8) & 0xff;
+        pload[3] = (airPressure10 >> 0) & 0xff;
 
-        //operatingVoltage1000
-        pload[8] =  (operatingVoltage1000 >> 8) & 0xff;
-        pload[9] =  (operatingVoltage1000 >> 0) & 0xff;
+        // operatingVoltage  (pload 4/5 statt vorher 8/9)
+        pload[4] = (operatingVoltage1000 >> 8) & 0xff;
+        pload[5] = (operatingVoltage1000 >> 0) & 0xff;
 
-        // lux
-        pload[10] = (lux >> 8) & 0xff;
-        pload[11] = (lux >> 0) & 0xff;
+        // lux  (pload 6/7 statt vorher 10/11)
+        pload[6] = (lux >> 8) & 0xff;
+        pload[7] = (lux >> 0) & 0xff;
     }
 };
 
@@ -307,8 +298,7 @@ class WeatherChannel : public Channel<Hal, SensorList1, EmptyList, List4, PEERS_
     int16_t   temperature10;
     uint16_t  humidity10;
     uint16_t  airPressure10;
-    int16_t   dewpoint10;
-    uint16_t  vaporConcentration100;
+    // dewpoint10 und vaporConcentration100 ENTFERNT
     uint16_t  operatingVoltage1000;
     uint16_t  lux;
     bool      regularWakeUp;
@@ -327,8 +317,7 @@ public:
         , temperature10(0)
         , humidity10(0)
         , airPressure10(0)
-        , dewpoint10(0)
-        , vaporConcentration100(0)
+        // dewpoint10 und vaporConcentration100 ENTFERNT
         , operatingVoltage1000(0)
         , lux(0)
         , regularWakeUp(true)
@@ -339,24 +328,23 @@ public:
     virtual void trigger(AlarmClock& clock)
     {
         measure();
-        
-        device().battery().update();                            // get current battery voltage; measure every sampling cycle
-        operatingVoltage1000 = device().battery().current();    // BatteryTM class, mV resolution
+
+        device().battery().update();
+        operatingVoltage1000 = device().battery().current();
         DPRINT(F("battery voltage x1000 = "));
         DDECLN(operatingVoltage1000);
-        
+
         uint8_t msgcnt = device().nextcount();
-        msg.init(msgcnt, temperature10, humidity10, airPressure10, dewpoint10, vaporConcentration100, operatingVoltage1000, device().battery().low(), lux);
+        // dewpoint10 und vaporConcentration100 ENTFERNT aus msg.init()
+        msg.init(msgcnt, temperature10, humidity10, airPressure10, operatingVoltage1000, device().battery().low(), lux);
         if (msg.flags() & Message::BCAST) {
             device().broadcastEvent(msg, *this);
         } else {
             device().sendPeerEvent(msg, *this);
         }
-        // reactivate for next measure
         uint16_t updCycle = this->device().getList0().updIntervall();
         set(seconds2ticks(updCycle));
         CLOCK.add(*this);
-        
         regularWakeUp = true;
     }
 
@@ -377,8 +365,6 @@ public:
         temperature10         = BME280.temperature();
         humidity10            = BME280.humidity();
         airPressure10         = BME280.pressureNN();
-        dewpoint10            = BME280.dewPoint();
-        vaporConcentration100 = BME280.vaporConcentration();
 
 #ifdef SENSOR_TSL2591
         TSL2591.measure();
@@ -389,8 +375,6 @@ public:
         DDEC(temperature10);DPRINT("/");
         DDEC(humidity10);;DPRINT("/");
         DDEC(airPressure10);;DPRINT("/");
-        DDEC(dewpoint10);DPRINT("/");
-        DDEC(vaporConcentration100);DPRINTLN(" ");
 
         #ifdef USE_DISPLAY
         char tempStr[8];
