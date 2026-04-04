@@ -436,7 +436,7 @@ public:
         // Row 2: Luftdruck
         strcpy(displayStr, "P:");
         strcat(displayStr, pressureStr);
-        strcat(displayStr, " hPa");
+        strcat(displayStr, "hPa");
         display.printText(displayStr, 0, 2);
 
         // Row 4: Batterie
