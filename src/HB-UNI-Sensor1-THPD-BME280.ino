@@ -334,10 +334,10 @@ public:
 
     virtual void trigger(AlarmClock& clock)
     {
-        measure();
-
         device().battery().update();
         operatingVoltage1000 = device().battery().current();
+
+        measure();
         DPRINT(F("battery voltage x1000 = "));
         DDECLN(operatingVoltage1000);
 
