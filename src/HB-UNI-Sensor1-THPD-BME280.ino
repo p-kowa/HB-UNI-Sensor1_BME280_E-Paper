@@ -26,8 +26,13 @@
 // #define USE_OTA_BOOTLOADER
 
 #define SENSOR_ONLY
-//#define USE_DISPLAY
+#define USE_DISPLAY
 #define NDEBUG
+
+// Display update interval: only refresh e-paper every N send cycles
+// With updIntervall=240s (4min): DISPLAY_UPDATE_CYCLES=20 -> display every ~80min
+// Adjust DISPLAY_UPDATE_CYCLES to match your send interval and desired display refresh rate
+#define DISPLAY_UPDATE_CYCLES  20
 
 #define EI_NOTEXTERNAL
 #include <EnableInterrupt.h>
@@ -302,6 +307,7 @@ class WeatherChannel : public Channel<Hal, SensorList1, EmptyList, List4, PEERS_
     uint16_t  operatingVoltage1000;
     uint16_t  lux;
     bool      regularWakeUp;
+    uint8_t   displayCycleCount;        // display refresh counter
 
 #ifdef SENSOR_BME280
     Sens_Bme280   BME280;
@@ -321,6 +327,7 @@ public:
         , operatingVoltage1000(0)
         , lux(0)
         , regularWakeUp(true)
+        , displayCycleCount(DISPLAY_UPDATE_CYCLES - 1)  // -1 so first cycle triggers display update
     {
     }
     virtual ~WeatherChannel() {}
@@ -402,6 +409,11 @@ public:
         itoa((operatingVoltage1000 % 1000) / 10, buf, 10);
         strcat(batterieStr, buf);
 
+        // Update display only every DISPLAY_UPDATE_CYCLES cycles
+        displayCycleCount++;
+        if (displayCycleCount >= DISPLAY_UPDATE_CYCLES) {
+            displayCycleCount = 0;
+
         // CC1101 CS HIGH + Hardware-SPI deaktivieren damit Bit-Bang EPD D11/D13 nutzen kann
         digitalWrite(10, HIGH);
         SPCR &= ~(1 << SPE);  // Hardware-SPI aus
@@ -412,13 +424,13 @@ public:
         // Row 0: Temperatur
         strcpy(displayStr, "T:");
         strcat(displayStr, tempStr);
-        strcat(displayStr, " C");
+        strcat(displayStr, "~C");  // ~ = degree symbol (ASCII 126, font-safe)
         display.printText(displayStr, 0, 0);
 
         // Row 1: Feuchtigkeit
         strcpy(displayStr, "F:");
         strcat(displayStr, humidityStr);
-        strcat(displayStr, " %");
+        strcat(displayStr, "%");
         display.printText(displayStr, 0, 1);
 
         // Row 2: Luftdruck
@@ -427,24 +439,25 @@ public:
         strcat(displayStr, " hPa");
         display.printText(displayStr, 0, 2);
 
-        // Row 3: Batterie
+        // Row 4: Batterie
         strcpy(displayStr, "Bat:");
         strcat(displayStr, batterieStr);
-        strcat(displayStr, " V");
-        display.printText(displayStr, 0, 3);
+        strcat(displayStr, "V");
+        display.printText(displayStr, 0, 4);
 
 #ifdef SENSOR_TSL2591
-        // Row 4: Lux
+        // Row 3: Lux
         itoa(lux, luxStr, 10);
         strcpy(displayStr, "L:");
         strcat(displayStr, luxStr);
-        strcat(displayStr, " lx");
-        display.printText(displayStr, 0, 4);
+        strcat(displayStr, "lx");
+        display.printText(displayStr, 0, 3);
 #endif
 
         display.updateDisplay();
 
         SPCR |= (1 << SPE);   // Hardware-SPI wieder an für CC1101
+        }
         #endif
 #endif
     }
