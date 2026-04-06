@@ -30,9 +30,9 @@
 #define NDEBUG
 
 // Display update interval: only refresh e-paper every N send cycles
-// With updIntervall=240s (4min): DISPLAY_UPDATE_CYCLES=20 -> display every ~80min
+// With updIntervall=240s (4min): DISPLAY_UPDATE_CYCLES=15 -> display every ~60min
 // Adjust DISPLAY_UPDATE_CYCLES to match your send interval and desired display refresh rate
-#define DISPLAY_UPDATE_CYCLES  20
+#define DISPLAY_UPDATE_CYCLES  15   // TEST: update every cycle (240s)
 
 #define EI_NOTEXTERNAL
 #include <EnableInterrupt.h>
@@ -414,9 +414,11 @@ public:
         if (displayCycleCount >= DISPLAY_UPDATE_CYCLES) {
             displayCycleCount = 0;
 
-        // CC1101 CS HIGH + Hardware-SPI deaktivieren damit Bit-Bang EPD D11/D13 nutzen kann
+        // CC1101 CS HIGH + Hardware-SPI aus + Interrupts sperren
+        // (CC1101-ISR würde sonst MOSI/SCK während Bit-Bang übernehmen → Frame-Korruption)
         digitalWrite(10, HIGH);
         SPCR &= ~(1 << SPE);  // Hardware-SPI aus
+        noInterrupts();       // CC1101-ISR blockieren (waitBusy nutzt jetzt delayMicroseconds!)
 
         display.clearDisplay();
         display.setRotation(1);
@@ -456,7 +458,8 @@ public:
 
         display.updateDisplay();
 
-        SPCR |= (1 << SPE);   // Hardware-SPI wieder an für CC1101
+        interrupts();                 // CC1101-ISR wieder erlaubt
+        SPCR |= (1 << SPE);           // Hardware-SPI wieder an für CC1101
         }
         #endif
 #endif

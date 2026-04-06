@@ -209,9 +209,10 @@ void EPD154::sendData(uint8_t dat)
 void EPD154::waitBusy()
 {
     // SSD1681: BUSY = HIGH means busy, LOW means ready
+    // delayMicroseconds() works without Timer0 ISR (safe inside noInterrupts())
     uint16_t timeout = 500; // max 5 seconds
     while (digitalRead(_busy) == HIGH && timeout > 0) {
-        delay(10);
+        delayMicroseconds(10000); // 10ms, no Timer0 dependency
         timeout--;
     }
 }
@@ -222,18 +223,14 @@ void EPD154::waitBusy()
 // ---------------------------------------------------------------------------
 void EPD154::epd_init()
 {
-    // Hardware reset
+    // Hardware reset: LOW 10ms → HIGH 10ms (matches working_revision1 timing)
+    // Required to wake from deep sleep.
+    digitalWrite(_rst, LOW);  delay(10);
     digitalWrite(_rst, HIGH); delay(10);
-    digitalWrite(_rst, LOW);  delay(2);
-    digitalWrite(_rst, HIGH); delay(10);
-    #ifndef NDEBUG
-    Serial.print(F("BUSY after HW reset=")); Serial.println(digitalRead(_busy));
-    #endif
     waitBusy();
-    #ifndef NDEBUG
-    Serial.println(F("SW reset..."));
-    #endif
+
     sendCmd(0x12); // Software reset
+    delayMicroseconds(10000); // 10ms: give controller time to assert BUSY before polling
     waitBusy();
     #ifndef NDEBUG
     Serial.println(F("Init done."));
